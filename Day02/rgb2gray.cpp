@@ -24,7 +24,6 @@ void grayscaleCPU(unsigned char* Pout, unsigned char* Pin, int width, int height
 }
 
 
-
 int main() {
 
     cv::Mat img = cv::imread("image.jpg");
