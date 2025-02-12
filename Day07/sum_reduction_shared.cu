@@ -6,7 +6,33 @@
 #include <algorithm>
 #include <chrono>
 
+__global__ void reduce_sh(float *d_in, float *d_out, int N) {
+    int idx = threadIdx.x + blockIdx.x * blockDim.x;
+    int tid = threadIdx.x;
+
+    extern __shared__ float sdata[];
+
+    if (idx >= N) return;
+
+    sdata[tid] = d_in[idx];
+    __syncthreads();
+
+    for (unsigned int s = blockDim.x / 2; s > 0; s >>= 1) {
+        if (tid < s && idx + s < N) {
+            sdata[idx] += sdata[idx + s];
+        }
+        __syncthreads();
+    }
+
+    
+    if (tid == 0) {
+        d_out[blockIdx.x] = sdata[idx];
+    }
+}
+
 __global__ void reduce_global(float *d_in, float *d_out, int N) {
+
+
     int idx = threadIdx.x + blockIdx.x * blockDim.x;
     int tid = threadIdx.x;
 
@@ -44,6 +70,8 @@ int main() {
 
     size_t num_threads = 1024;
     int num_blocks = (N + num_threads - 1) / num_threads;
+
+    
     float *h_out = (float *)malloc((num_blocks + 1) * sizeof(float));
 
     float *d_in, *d_out;
@@ -57,13 +85,13 @@ int main() {
     cudaEventCreate(&start);
     cudaEventCreate(&stop);
     cudaEventRecord(start);
+    
+    
 
-
-
-    reduce_global<<<num_blocks, num_threads>>>(d_in, d_out, N);
+    reduce_sh<<<num_blocks, num_threads, num_threads*sizeof(float)>>>(d_in, d_out, N);
     cudaMemcpy(h_out, d_out,num_blocks*sizeof(float), cudaMemcpyDeviceToHost);
 
-    reduce_global<<<1, num_blocks>>>(d_out, d_out, num_blocks);
+    reduce_sh<<<1, num_blocks,num_blocks*sizeof(float)>>>(d_out, d_out, num_blocks);
 
     cudaEventRecord(stop);
     cudaEventSynchronize(stop);
@@ -82,6 +110,8 @@ int main() {
 
     float cpu_sum = h_out[0];
 
+   
+
     if (gpu_sum == cpu_sum) {
         printf("Success! GPU and CPU sums match: %.2f\n", gpu_sum);
     } else {
@@ -99,6 +129,7 @@ int main() {
 
     return 0;
 }
+
 
 
 
