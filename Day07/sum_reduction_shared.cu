@@ -1,7 +1,6 @@
 %%writefile sum_reduction_sh.cu
 #include <cuda_runtime.h>
 #include <iostream>
-#include <vector>
 #include <algorithm>
 #include <chrono>
 
@@ -40,10 +39,12 @@ int main() {
     const int N = 1 << 24;
     size_t size = N * sizeof(float);
 
-    // Host memory allocation and initialization
+    // initialization
     float *h_in = (float *)malloc(size);
-    for (int i = 0; i < N; i++) {
-        h_in[i] = 1.0f;  // Initialize for known sum
+   for (int i = 0; i < M; i++) {
+        for (int j = 0; j < N; j++) {
+            h_in[i * cols + j] = static_cast<float>(rand()) / RAND_MAX;
+        }
     }
 
     size_t num_threads = 1024;
