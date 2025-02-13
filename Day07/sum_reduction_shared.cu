@@ -19,7 +19,7 @@ __global__ void reduce_sh(float *d_in, float *d_out, int N) {
     // Reduction within block
     for (unsigned int s = blockDim.x / 2; s > 0; s >>= 1) {
         if (tid < s) {
-            sdata[tid] += sdata[tid + s];  // Correct indexing: use tid, not idx
+            sdata[tid] += sdata[tid + s]; 
         }
         __syncthreads();
     }
