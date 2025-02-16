@@ -7,9 +7,10 @@
 #include <cuda_runtime.h>
 #include <cfloat>
 
+
 #define ROWS 100 
 #define COLS 200  
-
+#define BLOCK_DIM_X 256
 
 
 void softmax_cpu(float* input,float* output,int M,int N)
@@ -45,49 +46,58 @@ void softmax_cpu(float* input,float* output,int M,int N)
 
 __global__ void softmax_sh(float* input, float* output, int M, int N)
 {
-    //each block for one row
+    
     int row = threadIdx.y + blockDim.y * blockIdx.y;
     int col = threadIdx.x + blockDim.x * blockIdx.x;
 
-    __shared__ float denominator;
     __shared__ float maxVal;
-
-    
+    __shared__ float reduction[BLOCK_DIM_X]; 
 
     if (row < M && col < N) 
     {
-        
-        if(threadIdx.x == 0)
+        // Step 1: Compute max value in the row
+        if (threadIdx.x == 0)
         {
-          denominator = 0.0f;
-          maxVal = -FLT_MAX;
-        }
-
-        if(threadIdx.x == 0)
-        {
+            maxVal = -FLT_MAX;
             for (int j = 0; j < N; j++) 
             {
                 maxVal = fmaxf(maxVal, input[row * N + j]);
             }
-
         }
+
+        __syncthreads(); 
+
+       
+        float exp_val = expf(input[row * N + col] - maxVal);
+        reduction[threadIdx.x] = exp_val;
+
         __syncthreads();
-        
-        // Step 2: Compute denominator
-        if(threadIdx.x == 0)
+
+    
+        for (int stride = blockDim.x / 2; stride > 0; stride /= 2)
         {
+            if (threadIdx.x < stride)
+            {
+                reduction[threadIdx.x] += reduction[threadIdx.x + stride];
+            }
+            __syncthreads(); 
+        }
+
+  
+        if (threadIdx.x == 0)
+        {
+            float denominator = 0.0f;
+            denominator = reduction[0];
+
+      
             for (int j = 0; j < N; j++)
             {
-                denominator += expf(input[row * N + j] - maxVal);
+                output[row * N + j] = expf(input[row * N + j] - maxVal) / denominator;
             }
-
         }
-        
-        __syncthreads();
-        // Step 3: Compute softmax output
-        output[row * N + col] = expf(input[row * N + col] - maxVal) / denominator;
     }
 }
+
 
 
 
@@ -112,7 +122,7 @@ int main()
 
     cudaMemcpy(d_input, input, ROWS * COLS * sizeof(float), cudaMemcpyHostToDevice);
 
-    dim3 blockDim(COLS);
+    dim3 blockDim(BLOCK_DIM_X);
     dim3 gridDim(1, ROWS);
 
 
